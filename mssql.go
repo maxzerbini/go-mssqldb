@@ -27,8 +27,8 @@ var driverInstance = &Driver{processQueryText: true}
 var driverInstanceNoProcess = &Driver{processQueryText: false}
 
 func init() {
-	sql.Register("mssql", driverInstance)
-	sql.Register("sqlserver", driverInstanceNoProcess)
+	sql.Register("mssqlfast", driverInstance)
+	sql.Register("sqlserverfast", driverInstanceNoProcess)
 	createDialer = func(p *connectParams) Dialer {
 		return netDialer{&net.Dialer{KeepAlive: p.keepAlive}}
 	}
@@ -199,10 +199,13 @@ func (c *Conn) clearOuts() {
 }
 
 func (c *Conn) simpleProcessResp(ctx context.Context) error {
-	tokchan := make(chan tokenStruct, 5)
+	tokchan := newTokenStructBlockingQueue()
 	go processResponse(ctx, c.sess, tokchan, c.outs)
 	c.clearOuts()
-	for tok := range tokchan {
+	var tok tokenStruct
+	ok := true
+	for ok {
+		tok, ok = tokchan.pop()
 		switch token := tok.(type) {
 		case doneStruct:
 			if token.isError() {
@@ -587,14 +590,17 @@ func (s *Stmt) queryContext(ctx context.Context, args []namedValue) (rows driver
 }
 
 func (s *Stmt) processQueryResponse(ctx context.Context) (res driver.Rows, err error) {
-	tokchan := make(chan tokenStruct, 5)
+	tokchan := newTokenStructBlockingQueue()
 	ctx, cancel := context.WithCancel(ctx)
 	go processResponse(ctx, s.c.sess, tokchan, s.c.outs)
 	s.c.clearOuts()
 	// process metadata
 	var cols []columnStruct
+	ok := true
 loop:
-	for tok := range tokchan {
+	for ok {
+		var tok tokenStruct
+		tok, ok = tokchan.pop()
 		switch token := tok.(type) {
 		// By ignoring DONE token we effectively
 		// skip empty result-sets.
@@ -638,12 +644,15 @@ func (s *Stmt) exec(ctx context.Context, args []namedValue) (res driver.Result, 
 }
 
 func (s *Stmt) processExec(ctx context.Context) (res driver.Result, err error) {
-	tokchan := make(chan tokenStruct, 5)
+	tokchan := newTokenStructBlockingQueue()
 	go processResponse(ctx, s.c.sess, tokchan, s.c.outs)
 	s.c.clearOuts()
 	var rowCount int64
-	for token := range tokchan {
-		switch token := token.(type) {
+	ok := true
+	for ok {
+		var tok tokenStruct
+		tok, ok = tokchan.pop()
+		switch token := tok.(type) {
 		case doneInProcStruct:
 			if token.Status&doneCount != 0 {
 				rowCount += int64(token.RowCount)
@@ -667,7 +676,7 @@ func (s *Stmt) processExec(ctx context.Context) (res driver.Result, err error) {
 type Rows struct {
 	stmt    *Stmt
 	cols    []columnStruct
-	tokchan chan tokenStruct
+	tokchan *tokenStructBlockingQueue
 
 	nextCols []columnStruct
 
@@ -676,7 +685,9 @@ type Rows struct {
 
 func (rc *Rows) Close() error {
 	rc.cancel()
-	for _ = range rc.tokchan {
+	ok := true
+	for ok {
+		_, ok = rc.tokchan.pop()
 	}
 	rc.tokchan = nil
 	return nil
@@ -697,7 +708,10 @@ func (rc *Rows) Next(dest []driver.Value) error {
 	if rc.nextCols != nil {
 		return io.EOF
 	}
-	for tok := range rc.tokchan {
+	ok := true
+	for ok {
+		var tok tokenStruct
+		tok, ok = rc.tokchan.pop()
 		switch tokdata := tok.(type) {
 		case []columnStruct:
 			rc.nextCols = tokdata

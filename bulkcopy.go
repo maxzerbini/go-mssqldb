@@ -227,12 +227,15 @@ func (b *Bulk) Done() (rowcount int64, err error) {
 
 	buf.FinishPacket()
 
-	tokchan := make(chan tokenStruct, 5)
+	tokchan := newTokenStructBlockingQueue()
 	go processResponse(b.ctx, b.cn.sess, tokchan, nil)
 
 	var rowCount int64
-	for token := range tokchan {
-		switch token := token.(type) {
+	ok := true
+	for ok {
+		var tok tokenStruct
+		tok, ok = tokchan.pop()
+		switch token := tok.(type) {
 		case doneStruct:
 			if token.Status&doneCount != 0 {
 				rowCount = int64(token.RowCount)

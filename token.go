@@ -90,6 +90,8 @@ type doneStruct struct {
 	errors   []Error
 }
 
+type contextDone struct{}
+
 func (d doneStruct) isError() bool {
 	return d.Status&doneError != 0 || len(d.errors) > 0
 }
@@ -538,15 +540,15 @@ func parseReturnValue(r *tdsBuffer) (nv namedValue) {
 	return
 }
 
-func processSingleResponse(sess *tdsSession, ch chan tokenStruct, outs map[string]interface{}) {
+func processSingleResponse(sess *tdsSession, tokQueue *tokenStructBlockingQueue, outs map[string]interface{}) {
 	defer func() {
 		if err := recover(); err != nil {
-			if sess.logFlags&logErrors != 0 {
-				sess.log.Printf("ERROR: Intercepted panic %v", err)
-			}
-			ch <- err
+			//if sess.logFlags&logErrors != 0 {
+			sess.log.Printf("ERROR: Intercepted panic %v", err)
+			//}
+			tokQueue.put(err)
 		}
-		close(ch)
+		tokQueue.close()
 	}()
 
 	packet_type, err := sess.buf.BeginRead()
@@ -554,7 +556,7 @@ func processSingleResponse(sess *tdsSession, ch chan tokenStruct, outs map[strin
 		if sess.logFlags&logErrors != 0 {
 			sess.log.Printf("ERROR: BeginRead failed %v", err)
 		}
-		ch <- err
+		tokQueue.put(err)
 		return
 	}
 	if packet_type != packReply {
@@ -569,23 +571,23 @@ func processSingleResponse(sess *tdsSession, ch chan tokenStruct, outs map[strin
 		}
 		switch token {
 		case tokenSSPI:
-			ch <- parseSSPIMsg(sess.buf)
+			tokQueue.put(parseSSPIMsg(sess.buf))
 			return
 		case tokenReturnStatus:
 			returnStatus := parseReturnStatus(sess.buf)
-			ch <- returnStatus
+			tokQueue.put(returnStatus)
 		case tokenLoginAck:
 			loginAck := parseLoginAck(sess.buf)
-			ch <- loginAck
+			tokQueue.put(loginAck)
 		case tokenOrder:
 			order := parseOrder(sess.buf)
-			ch <- order
+			tokQueue.put(order)
 		case tokenDoneInProc:
 			done := parseDoneInProc(sess.buf)
 			if sess.logFlags&logRows != 0 && done.Status&doneCount != 0 {
 				sess.log.Printf("(%d row(s) affected)\n", done.RowCount)
 			}
-			ch <- done
+			tokQueue.put(done)
 		case tokenDone, tokenDoneProc:
 			done := parseDone(sess.buf)
 			done.errors = errs
@@ -593,27 +595,27 @@ func processSingleResponse(sess *tdsSession, ch chan tokenStruct, outs map[strin
 				sess.log.Printf("got DONE or DONEPROC status=%d", done.Status)
 			}
 			if done.Status&doneSrvError != 0 {
-				ch <- errors.New("SQL Server had internal error")
+				tokQueue.put(errors.New("SQL Server had internal error"))
 				return
 			}
 			if sess.logFlags&logRows != 0 && done.Status&doneCount != 0 {
 				sess.log.Printf("(%d row(s) affected)\n", done.RowCount)
 			}
-			ch <- done
+			tokQueue.put(done)
 			if done.Status&doneMore == 0 {
 				return
 			}
 		case tokenColMetadata:
 			columns = parseColMetadata72(sess.buf)
-			ch <- columns
+			tokQueue.put(columns)
 		case tokenRow:
 			row := make([]interface{}, len(columns))
 			parseRow(sess.buf, columns, row)
-			ch <- row
+			tokQueue.put(row)
 		case tokenNbcRow:
 			row := make([]interface{}, len(columns))
 			parseNbcRow(sess.buf, columns, row)
-			ch <- row
+			tokQueue.put(row)
 		case tokenEnvChange:
 			processEnvChg(sess)
 		case tokenError:
@@ -641,7 +643,7 @@ func processSingleResponse(sess *tdsSession, ch chan tokenStruct, outs map[strin
 					err = scanIntoOut(name, nv.Value, ov)
 					if err != nil {
 						fmt.Println("scan error", err)
-						ch <- err
+						tokQueue.put(err)
 					}
 				}
 			}
@@ -674,10 +676,10 @@ type parseResp struct {
 	cancelError error
 }
 
-func (ts *parseResp) sendAttention(ch chan tokenStruct) parseRespIter {
+func (ts *parseResp) sendAttention(ch *tokenStructBlockingQueue) parseRespIter {
 	if err := sendAttention(ts.sess.buf); err != nil {
 		ts.dlogf("failed to send attention signal %v", err)
-		ch <- err
+		ch.put(err)
 		return parseRespIterDone
 	}
 	ts.state = parseRespStateCancel
@@ -695,78 +697,98 @@ func (ts *parseResp) dlogf(f string, v ...interface{}) {
 	}
 }
 
-func (ts *parseResp) iter(ctx context.Context, ch chan tokenStruct, tokChan chan tokenStruct) parseRespIter {
+func (ts *parseResp) manageCtxDone(ctx context.Context, tokQueue *tokenStructBlockingQueue, iterDone chan bool) {
+	select {
+	case <-iterDone:
+		return
+	case <-ts.ctxDone:
+		tokQueue.put(contextDone{})
+		return
+	}
+}
+
+func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tokQueue *tokenStructBlockingQueue) parseRespIter {
+	//iterDone := make(chan bool, 2)
+	//go ts.manageCtxDone(ctx, tokQueue, iterDone)
 	switch ts.state {
 	default:
 		panic("unknown state")
 	case parseRespStateNormal:
-		select {
-		case tok, ok := <-tokChan:
-			if !ok {
-				ts.dlog("response finished")
-				return parseRespIterDone
-			}
-			if err, ok := tok.(net.Error); ok && err.Timeout() {
-				ts.cancelError = err
-				ts.dlog("got timeout error, sending attention signal to server")
-				return ts.sendAttention(ch)
-			}
-			// Pass the token along.
-			ch <- tok
-			return parseRespIterContinue
-
-		case <-ts.ctxDone:
-			ts.ctxDone = nil
-			ts.dlog("got cancel message, sending attention signal to server")
-			return ts.sendAttention(ch)
-		}
-	case parseRespStateCancel: // Read all responses until a DONE or error is received.Auth
-		select {
-		case tok, ok := <-tokChan:
-			if !ok {
-				ts.dlog("response finished but waiting for attention ack")
-				return parseRespIterNext
-			}
-			switch tok := tok.(type) {
-			default:
-				// Ignore all other tokens while waiting.
-				// The TDS spec says other tokens may arrive after an attention
-				// signal is sent. Ignore these tokens and continue looking for
-				// a DONE with attention confirm mark.
-			case doneStruct:
-				if tok.Status&doneAttn != 0 {
-					ts.dlog("got cancellation confirmation from server")
-					if ts.cancelError != nil {
-						ch <- ts.cancelError
-						ts.cancelError = nil
-					} else {
-						ch <- ctx.Err()
-					}
-					return parseRespIterDone
-				}
-
-			// If an error happens during cancel, pass it along and just stop.
-			// We are uncertain to receive more tokens.
-			case error:
-				ch <- tok
-				ts.state = parseRespStateClosing
-			}
-			return parseRespIterContinue
-		case <-ts.ctxDone:
-			ts.ctxDone = nil
-			ts.state = parseRespStateClosing
-			return parseRespIterContinue
-		}
-	case parseRespStateClosing: // Wait for current token chan to close.
-		if _, ok := <-tokChan; !ok {
+		tok, ok := tokQueue.pop()
+		if !ok {
 			ts.dlog("response finished")
+			//iterDone <- true
 			return parseRespIterDone
 		}
+		/*
+			if _, ok2 := tok.(contextDone); ok2 {
+				ts.ctxDone = nil
+				ts.dlog("got cancel message, sending attention signal to server")
+				return ts.sendAttention(ch)
+			}
+		*/
+		if err, ok := tok.(net.Error); ok && err.Timeout() {
+			ts.cancelError = err
+			ts.dlog("got timeout error, sending attention signal to server")
+			//iterDone <- true
+			return ts.sendAttention(ch)
+		}
+		// Pass the token along.
+		ch.put(tok)
+		//iterDone <- true
+		return parseRespIterContinue
+
+	case parseRespStateCancel: // Read all responses until a DONE or error is received.Auth
+		tok, ok := tokQueue.pop()
+		if !ok {
+			ts.dlog("response finished but waiting for attention ack")
+			//iterDone <- true
+			return parseRespIterNext
+		}
+		switch tok := tok.(type) {
+		/*
+			case contextDone:
+				ts.ctxDone = nil
+				ts.dlog("got cancel message, sending attention signal to server")
+				return ts.sendAttention(ch)
+		*/
+		default:
+			// Ignore all other tokens while waiting.
+			// The TDS spec says other tokens may arrive after an attention
+			// signal is sent. Ignore these tokens and continue looking for
+			// a DONE with attention confirm mark.
+		case doneStruct:
+			if tok.Status&doneAttn != 0 {
+				ts.dlog("got cancellation confirmation from server")
+				if ts.cancelError != nil {
+					ch.put(ts.cancelError)
+					ts.cancelError = nil
+				} else {
+					ch.put(ctx.Err())
+				}
+				//iterDone <- true
+				return parseRespIterDone
+			}
+		// If an error happens during cancel, pass it along and just stop.
+		// We are uncertain to receive more tokens.
+		case error:
+			ch.put(tok)
+			ts.state = parseRespStateClosing
+		}
+		//iterDone <- true
+		return parseRespIterContinue
+	case parseRespStateClosing: // Wait for current token chan to close.
+		if _, ok := tokQueue.pop(); !ok {
+			ts.dlog("response finished on parseRespStateClosing")
+			//iterDone <- true
+			return parseRespIterDone
+		}
+		//iterDone <- true
 		return parseRespIterContinue
 	}
 }
 
-func processResponse(ctx context.Context, sess *tdsSession, ch chan tokenStruct, outs map[string]interface{}) {
+func processResponse(ctx context.Context, sess *tdsSession, ch *tokenStructBlockingQueue, outs map[string]interface{}) {
 	ts := &parseResp{
 		sess:    sess,
 		ctxDone: ctx.Done(),
@@ -775,23 +797,24 @@ func processResponse(ctx context.Context, sess *tdsSession, ch chan tokenStruct,
 		// Ensure any remaining error is piped through
 		// or the query may look like it executed when it actually failed.
 		if ts.cancelError != nil {
-			ch <- ts.cancelError
+			ch.put(ts.cancelError)
 			ts.cancelError = nil
 		}
-		close(ch)
+		ch.close()
 	}()
 
 	// Loop over multiple responses.
 	for {
 		ts.dlog("initiating response reading")
 
-		tokChan := make(chan tokenStruct)
-		go processSingleResponse(sess, tokChan, outs)
+		//tokChan := make(chan tokenStruct)
+		tokQueue := newTokenStructBlockingQueue()
+		go processSingleResponse(sess, tokQueue, outs)
 
 		// Loop over multiple tokens in response.
 	tokensLoop:
 		for {
-			switch ts.iter(ctx, ch, tokChan) {
+			switch ts.iter(ctx, ch, tokQueue) {
 			case parseRespIterContinue:
 				// Nothing, continue to next token.
 			case parseRespIterNext:

@@ -4,8 +4,9 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"github.com/denisenkom/go-mssqldb"
 	"log"
+
+	"github.com/maxzerbini/go-mssqldb"
 )
 
 var (
