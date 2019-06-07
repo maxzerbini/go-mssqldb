@@ -708,8 +708,6 @@ func (ts *parseResp) manageCtxDone(ctx context.Context, tokQueue *tokenStructBlo
 }
 
 func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tokQueue *tokenStructBlockingQueue) parseRespIter {
-	//iterDone := make(chan bool, 2)
-	//go ts.manageCtxDone(ctx, tokQueue, iterDone)
 	switch ts.state {
 	default:
 		panic("unknown state")
@@ -720,13 +718,11 @@ func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tok
 			//iterDone <- true
 			return parseRespIterDone
 		}
-		/*
-			if _, ok2 := tok.(contextDone); ok2 {
-				ts.ctxDone = nil
-				ts.dlog("got cancel message, sending attention signal to server")
-				return ts.sendAttention(ch)
-			}
-		*/
+		if _, okCtx := tok.(contextDone); okCtx {
+			ts.ctxDone = nil
+			ts.dlog("got cancel message, sending attention signal to server")
+			return ts.sendAttention(ch)
+		}
 		if err, ok := tok.(net.Error); ok && err.Timeout() {
 			ts.cancelError = err
 			ts.dlog("got timeout error, sending attention signal to server")
@@ -746,12 +742,10 @@ func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tok
 			return parseRespIterNext
 		}
 		switch tok := tok.(type) {
-		/*
-			case contextDone:
-				ts.ctxDone = nil
-				ts.dlog("got cancel message, sending attention signal to server")
-				return ts.sendAttention(ch)
-		*/
+		case contextDone:
+			ts.ctxDone = nil
+			ts.dlog("got cancel message, sending attention signal to server")
+			return ts.sendAttention(ch)
 		default:
 			// Ignore all other tokens while waiting.
 			// The TDS spec says other tokens may arrive after an attention
@@ -810,7 +804,8 @@ func processResponse(ctx context.Context, sess *tdsSession, ch *tokenStructBlock
 		//tokChan := make(chan tokenStruct)
 		tokQueue := newTokenStructBlockingQueue()
 		go processSingleResponse(sess, tokQueue, outs)
-
+		iterDone := make(chan bool, 2)
+		go ts.manageCtxDone(ctx, tokQueue, iterDone)
 		// Loop over multiple tokens in response.
 	tokensLoop:
 		for {
@@ -823,5 +818,6 @@ func processResponse(ctx context.Context, sess *tdsSession, ch *tokenStructBlock
 				return
 			}
 		}
+		iterDone <- true
 	}
 }

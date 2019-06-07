@@ -69,9 +69,9 @@ func (bq *tokenStructBlockingQueue) put(value tokenStruct) bool {
 	bq.queue.enqueue(value)
 	bq.lock.Unlock()
 
-	bq.notifyLock.Lock()
+	//bq.notifyLock.Lock()
 	bq.monitor.Signal()
-	bq.notifyLock.Unlock()
+	//bq.notifyLock.Unlock()
 	return true
 }
 
