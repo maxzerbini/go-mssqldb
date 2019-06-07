@@ -552,7 +552,7 @@ func TestShortTimeout(t *testing.T) {
 	dsnParams := dsn.Query()
 	dsnParams.Set("Connection Timeout", "2")
 	dsn.RawQuery = dsnParams.Encode()
-	conn, err := sql.Open("mssql", dsn.String())
+	conn, err := sql.Open("mssqlfast", dsn.String())
 	if err != nil {
 		t.Fatal("Open connection failed:", err.Error())
 	}
@@ -1387,7 +1387,7 @@ func TestLongConnection(t *testing.T) {
 			dsnParams.Set("connection timeout", item.connTimeout)
 			dsn.RawQuery = dsnParams.Encode()
 
-			db, err := sql.Open("sqlserver", dsn.String())
+			db, err := sql.Open("sqlserverfast", dsn.String())
 			if err != nil {
 				t.Fatalf("failed to open driver sqlserver")
 			}
@@ -2092,7 +2092,7 @@ func TestDisconnect1(t *testing.T) {
 		}()
 		return di
 	}
-	db, err := sql.Open("sqlserver", makeConnStr(t).String())
+	db, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2154,7 +2154,7 @@ func TestDisconnect2(t *testing.T) {
 			}()
 			return di
 		}
-		db, err := sql.Open("sqlserver", makeConnStr(t).String())
+		db, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -182,7 +182,7 @@ func (l testLogger) Println(v ...interface{}) {
 func open(t *testing.T) *sql.DB {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
-	conn, err := sql.Open("mssql", makeConnStr(t).String())
+	conn, err := sql.Open("mssqlfast", makeConnStr(t).String())
 	if err != nil {
 		t.Error("Open connection failed:", err.Error())
 		return nil
@@ -194,7 +194,7 @@ func open(t *testing.T) *sql.DB {
 func TestConnect(t *testing.T) {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
-	conn, err := sql.Open("mssql", makeConnStr(t).String())
+	conn, err := sql.Open("mssqlfast", makeConnStr(t).String())
 	if err != nil {
 		t.Error("Open connection failed:", err.Error())
 		return
@@ -332,7 +332,7 @@ func TestSecureWithInvalidHostName(t *testing.T) {
 	dsnParams.Set("hostNameInCertificate", "foo.bar")
 	dsn.RawQuery = dsnParams.Encode()
 
-	conn, err := sql.Open("mssql", dsn.String())
+	conn, err := sql.Open("mssqlfast", dsn.String())
 	if err != nil {
 		t.Fatal("Open connection failed:", err.Error())
 	}
@@ -353,7 +353,7 @@ func TestSecureConnection(t *testing.T) {
 	dsnParams.Set("TrustServerCertificate", "true")
 	dsn.RawQuery = dsnParams.Encode()
 
-	conn, err := sql.Open("mssql", dsn.String())
+	conn, err := sql.Open("mssqlfast", dsn.String())
 	if err != nil {
 		t.Fatal("Open connection failed:", err.Error())
 	}
@@ -512,7 +512,7 @@ func TestBadConnect(t *testing.T) {
 	connURL.User = url.UserPassword("baduser", "badpwd")
 	badDSN := connURL.String()
 
-	conn, err := sql.Open("mssql", badDSN)
+	conn, err := sql.Open("mssqlfast", badDSN)
 	if err != nil {
 		t.Error("Open connection failed:", err.Error())
 	}

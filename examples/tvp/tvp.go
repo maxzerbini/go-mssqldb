@@ -73,7 +73,7 @@ func main() {
 	if *debug {
 		fmt.Printf(" connString:%s\n", connString)
 	}
-	conn, err := sql.Open("sqlserver", connString)
+	conn, err := sql.Open("sqlserverfast", connString)
 	if err != nil {
 		log.Fatal("Open connection failed:", err.Error())
 	}

@@ -127,7 +127,7 @@ func TestTVP(t *testing.T) {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
 
-	db, err := sql.Open("sqlserver", makeConnStr(t).String())
+	db, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatalf("failed to open driver sqlserver")
 	}
@@ -379,7 +379,7 @@ func TestTVP_WithTag(t *testing.T) {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
 
-	db, err := sql.Open("sqlserver", makeConnStr(t).String())
+	db, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatalf("failed to open driver sqlserver")
 	}
@@ -638,7 +638,7 @@ func TestTVPSchema(t *testing.T) {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
 
-	conn, err := sql.Open("sqlserver", makeConnStr(t).String())
+	conn, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		log.Fatal("Open connection failed:", err.Error())
 	}
@@ -707,7 +707,7 @@ func TestTVPObject(t *testing.T) {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
 
-	conn, err := sql.Open("sqlserver", makeConnStr(t).String())
+	conn, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		log.Fatal("Open connection failed:", err.Error())
 	}

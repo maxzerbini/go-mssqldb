@@ -16,7 +16,7 @@ func TestOutputParam(t *testing.T) {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
 
-	db, err := sql.Open("sqlserver", makeConnStr(t).String())
+	db, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatalf("failed to open driver sqlserver")
 	}
@@ -327,7 +327,7 @@ END;
 	checkConnStr(t)
 	SetLogger(testLogger{t})
 
-	db, err := sql.Open("sqlserver", makeConnStr(t).String())
+	db, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatalf("failed to open driver sqlserver")
 	}
@@ -526,7 +526,7 @@ func TestOutputParamWithRows(t *testing.T) {
 	checkConnStr(t)
 	SetLogger(testLogger{t})
 
-	db, err := sql.Open("sqlserver", makeConnStr(t).String())
+	db, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatalf("failed to open driver sqlserver")
 	}

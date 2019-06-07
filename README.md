@@ -84,7 +84,7 @@ Other supported formats are listed below.
       // Path:  instance, // if connecting to an instance instead of a port
       RawQuery: query.Encode(),
   }
-  db, err := sql.Open("sqlserver", u.String())
+  db, err := sql.Open("sqlserverfast", u.String())
 ```
 
 2. ADO: `key=value` pairs separated by `;`. Values may not contain `;`, leading and trailing whitespace is ignored.

@@ -54,7 +54,7 @@ select Options = @@OPTIONS;
 
 func TestParameterTypes(t *testing.T) {
 	checkConnStr(t)
-	pool, err := sql.Open("sqlserver", makeConnStr(t).String())
+	pool, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ select
 
 func TestParameterValues(t *testing.T) {
 	checkConnStr(t)
-	pool, err := sql.Open("sqlserver", makeConnStr(t).String())
+	pool, err := sql.Open("sqlserverfast", makeConnStr(t).String())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,7 +29,7 @@ func ExampleDateTimeOffset() {
 		fmt.Printf(" connString:%s\n", connString)
 	}
 
-	db, err := sql.Open("sqlserver", connString)
+	db, err := sql.Open("sqlserverfast", connString)
 	if err != nil {
 		log.Fatal("Open connection failed:", err.Error())
 	}
