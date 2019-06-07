@@ -4,6 +4,12 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/jrln8cs62wj9i0a2?svg=true)](https://ci.appveyor.com/project/maxzerbini/go-mssqldb)
 [![codecov](https://codecov.io/gh/maxzerbini/go-mssqldb/branch/master/graph/badge.svg)](https://codecov.io/gh/maxzerbini/go-mssqldb)
 
+This repository is forked from the original work of denisenkom.
+
+The scope of this driver is to provide a faster query executor than the original one. This implementation avoids using channels and adopts a blocking queue instead.
+
+Preliminary tests on result sets containing million of rows seem to perform 2.5 times faster.
+
 ## Install
 
 Requires Go 1.8 or above.
