@@ -95,12 +95,15 @@ func TestSendSqlBatch(t *testing.T) {
 		return
 	}
 
-	ch := make(chan tokenStruct, 5)
+	ch := newTokenStructBlockingQueue()
 	go processResponse(context.Background(), conn, ch, nil)
 
 	var lastRow []interface{}
+	var tok tokenStruct
+	ok := true
 loop:
-	for tok := range ch {
+	for ok {
+		tok, ok = ch.pop()
 		switch token := tok.(type) {
 		case doneStruct:
 			break loop
