@@ -1909,28 +1909,28 @@ func TestDriverParams(t *testing.T) {
 	list := []sqlCmd{
 		{
 			Name:   "preprocess-ordinal",
-			Driver: "mssql",
+			Driver: "mssqlfast",
 			Query:  `select V1=:1`,
 			Param:  []interface{}{"abc"},
 			Expect: []interface{}{"abc"},
 		},
 		{
 			Name:   "preprocess-name",
-			Driver: "mssql",
+			Driver: "mssqlfast",
 			Query:  `select V1=:First`,
 			Param:  []interface{}{sql.Named("First", "abc")},
 			Expect: []interface{}{"abc"},
 		},
 		{
 			Name:   "raw-ordinal",
-			Driver: "sqlserver",
+			Driver: "sqlserverfast",
 			Query:  `select V1=@p1`,
 			Param:  []interface{}{"abc"},
 			Expect: []interface{}{"abc"},
 		},
 		{
 			Name:   "raw-name",
-			Driver: "sqlserver",
+			Driver: "sqlserverfast",
 			Query:  `select V1=@First`,
 			Param:  []interface{}{sql.Named("First", "abc")},
 			Expect: []interface{}{"abc"},
