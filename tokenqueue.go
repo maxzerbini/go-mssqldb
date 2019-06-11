@@ -77,7 +77,7 @@ func (bq *tokenStructBlockingQueue) put(value tokenStruct) bool {
 
 // pop front value from queue. Returns nil and false if queue closed
 func (bq *tokenStructBlockingQueue) pop() (tokenStruct, bool) {
-	if bq.closed && bq.queue.size() == 0 {
+	if bq.closed && bq.queue.size() <= 0 {
 		return nil, false
 	}
 	val, ok := bq.getUnblock()

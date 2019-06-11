@@ -715,7 +715,6 @@ func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tok
 		tok, ok := tokQueue.pop()
 		if !ok {
 			ts.dlog("response finished")
-			//iterDone <- true
 			return parseRespIterDone
 		}
 		if _, okCtx := tok.(contextDone); okCtx {
@@ -726,19 +725,16 @@ func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tok
 		if err, ok := tok.(net.Error); ok && err.Timeout() {
 			ts.cancelError = err
 			ts.dlog("got timeout error, sending attention signal to server")
-			//iterDone <- true
 			return ts.sendAttention(ch)
 		}
 		// Pass the token along.
 		ch.put(tok)
-		//iterDone <- true
 		return parseRespIterContinue
 
 	case parseRespStateCancel: // Read all responses until a DONE or error is received.Auth
 		tok, ok := tokQueue.pop()
 		if !ok {
 			ts.dlog("response finished but waiting for attention ack")
-			//iterDone <- true
 			return parseRespIterNext
 		}
 		switch tok := tok.(type) {
@@ -760,7 +756,6 @@ func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tok
 				} else {
 					ch.put(ctx.Err())
 				}
-				//iterDone <- true
 				return parseRespIterDone
 			}
 		// If an error happens during cancel, pass it along and just stop.
@@ -769,15 +764,12 @@ func (ts *parseResp) iter(ctx context.Context, ch *tokenStructBlockingQueue, tok
 			ch.put(tok)
 			ts.state = parseRespStateClosing
 		}
-		//iterDone <- true
 		return parseRespIterContinue
 	case parseRespStateClosing: // Wait for current token chan to close.
 		if _, ok := tokQueue.pop(); !ok {
 			ts.dlog("response finished on parseRespStateClosing")
-			//iterDone <- true
 			return parseRespIterDone
 		}
-		//iterDone <- true
 		return parseRespIterContinue
 	}
 }
@@ -815,6 +807,7 @@ func processResponse(ctx context.Context, sess *tdsSession, ch *tokenStructBlock
 			case parseRespIterNext:
 				break tokensLoop
 			case parseRespIterDone:
+				iterDone <- true
 				return
 			}
 		}
